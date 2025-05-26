@@ -10,7 +10,19 @@ int main() {
     char last_command[MAX_CMD_BUFFER] = "";  // stores last command
     int exit_code = 0;
 
-    printf("Starting IC shell\n");
+    FILE* input = stdin;
+
+    // Script mode: open file instead of stdin
+    if (argc > 1) {
+        input = fopen(argv[1], "r");
+        if (!input) {
+            perror("Error opening script file");
+            return 1;
+        }
+    }
+    else {
+        printf("Starting IC shell\n");
+    }
 
     while (1) {
         printf("icsh $ ");
@@ -55,7 +67,7 @@ int main() {
             char* arg = strtok(NULL, " ");
             if (arg) {
                 int code = atoi(arg);
-                exit_code = code & 0xFF; // truncate to 0–255
+                exit_code = code & 0xFF;
             }
             printf("bye\n");
             break;
