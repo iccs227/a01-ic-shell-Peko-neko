@@ -1,3 +1,8 @@
+/*  ICCS227: Project 1:icsh 
+*   Name: Phiraphat Wattanaprasit
+*   StudentID: 6481333
+*/
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -8,13 +13,12 @@ void handle_command(char* buffer, char* last_command, int* exit_code) {
     // Remove newline if present
     buffer[strcspn(buffer, "\n")] = 0;
 
-    // Ignore empty line
     if (strlen(buffer) == 0) return;
 
     // Handle '!!'
     if (strcmp(buffer, "!!") == 0) {
         if (strlen(last_command) == 0) {
-            return;
+            return;  // No previous command
         }
         printf("%s\n", last_command);
         strcpy(buffer, last_command);
@@ -27,6 +31,7 @@ void handle_command(char* buffer, char* last_command, int* exit_code) {
     char* cmd = strtok(buffer, " ");
     if (!cmd) return;
 
+    // Built-in commands
     if (strcmp(cmd, "echo") == 0) {
         char* arg = strtok(NULL, "");
         if (arg) printf("%s\n", arg);
@@ -52,6 +57,7 @@ int main(int argc, char* argv[]) {
 
     FILE* input = stdin;
 
+    // Check for script file
     if (argc > 1) {
         input = fopen(argv[1], "r");
         if (!input) {
