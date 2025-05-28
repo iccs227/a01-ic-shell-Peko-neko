@@ -1,4 +1,4 @@
-/*  ICCS227: Project 1:icsh 
+/*  ICCS227: Project 1:icsh
 *   Name: Phiraphat Wattanaprasit
 *   StudentID: 6481333
 */
@@ -8,19 +8,32 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <signal.h>
 
 #define MAX_CMD_BUFFER 255
 
+pid_t current_pid = -1;
+
+void sigint_handler(int sig) {
+    if (current_pid > 0) {
+        kill(current_pid, SIGINT);
+    }
+}
+
+void sigtstp_handler(int sig) {
+    if (current_pid > 0) {
+        kill(current_pid, SIGTSTP);
+    }
+}
+
 void handle_command(char* buffer, char* last_command, int* exit_code) {
-    // Remove newline if present
     buffer[strcspn(buffer, "\n")] = 0;
 
     if (strlen(buffer) == 0) return;
 
-    // Handle '!!'
     if (strcmp(buffer, "!!") == 0) {
         if (strlen(last_command) == 0) {
-            return;  // No previous command
+            return;
         }
         printf("%s\n", last_command);
         strcpy(buffer, last_command);
@@ -29,7 +42,11 @@ void handle_command(char* buffer, char* last_command, int* exit_code) {
         strcpy(last_command, buffer);
     }
 
-    // Tokenize and process
+    if (strcmp(buffer, "echo $?") == 0) {
+        printf("%d\n", *exit_code);
+        return;
+    }
+
     char* cmd = strtok(buffer, " ");
     if (!cmd) return;
 
@@ -38,6 +55,7 @@ void handle_command(char* buffer, char* last_command, int* exit_code) {
         if (arg) {
             printf("%s\n", arg);
         }
+        *exit_code = 0;
         return;
     }
     else if (strcmp(cmd, "exit") == 0) {
@@ -50,7 +68,6 @@ void handle_command(char* buffer, char* last_command, int* exit_code) {
         exit(*exit_code);
     }
     else {
-        // External command
         char* args[64];
         int i = 0;
         args[i++] = cmd;
@@ -70,8 +87,10 @@ void handle_command(char* buffer, char* last_command, int* exit_code) {
             exit(1);
         }
         else {
+            current_pid = pid;
             int status;
             waitpid(pid, &status, 0);
+            current_pid = -1;
             if (WIFEXITED(status)) {
                 *exit_code = WEXITSTATUS(status);
             }
@@ -86,7 +105,9 @@ int main(int argc, char* argv[]) {
 
     FILE* input = stdin;
 
-    // Check for script file
+    signal(SIGINT, sigint_handler);
+    signal(SIGTSTP, sigtstp_handler);
+
     if (argc > 1) {
         input = fopen(argv[1], "r");
         if (!input) {
@@ -105,7 +126,6 @@ int main(int argc, char* argv[]) {
 
         if (!fgets(buffer, MAX_CMD_BUFFER, input)) {
             if (input != stdin) fclose(input);
-
             printf("bye\n");
             break;
         }
@@ -115,4 +135,3 @@ int main(int argc, char* argv[]) {
 
     return exit_code;
 }
-
