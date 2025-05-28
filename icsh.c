@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
 #define MAX_CMD_BUFFER 255
 
@@ -31,10 +33,12 @@ void handle_command(char* buffer, char* last_command, int* exit_code) {
     char* cmd = strtok(buffer, " ");
     if (!cmd) return;
 
-    // Built-in commands
     if (strcmp(cmd, "echo") == 0) {
         char* arg = strtok(NULL, "");
-        if (arg) printf("%s\n", arg);
+        if (arg) {
+            printf("%s\n", arg);
+        }
+        return;
     }
     else if (strcmp(cmd, "exit") == 0) {
         char* arg = strtok(NULL, " ");
@@ -46,7 +50,32 @@ void handle_command(char* buffer, char* last_command, int* exit_code) {
         exit(*exit_code);
     }
     else {
-        printf("bad command\n");
+        // External command
+        char* args[64];
+        int i = 0;
+        args[i++] = cmd;
+        char* token;
+        while ((token = strtok(NULL, " ")) != NULL && i < 63) {
+            args[i++] = token;
+        }
+        args[i] = NULL;
+
+        pid_t pid = fork();
+        if (pid < 0) {
+            perror("fork failed");
+        }
+        else if (pid == 0) {
+            execvp(args[0], args);
+            perror("exec failed");
+            exit(1);
+        }
+        else {
+            int status;
+            waitpid(pid, &status, 0);
+            if (WIFEXITED(status)) {
+                *exit_code = WEXITSTATUS(status);
+            }
+        }
     }
 }
 
@@ -76,6 +105,7 @@ int main(int argc, char* argv[]) {
 
         if (!fgets(buffer, MAX_CMD_BUFFER, input)) {
             if (input != stdin) fclose(input);
+
             printf("bye\n");
             break;
         }
@@ -85,3 +115,4 @@ int main(int argc, char* argv[]) {
 
     return exit_code;
 }
+
