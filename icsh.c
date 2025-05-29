@@ -10,8 +10,20 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <stdbool.h>
 
 #define MAX_CMD_BUFFER 255
+#define MAX_JOBS 100
+
+typedef struct {
+    int job_id;
+    pid_t pid;
+    char command[MAX_CMD_BUFFER];
+    bool running;
+} Job;
+
+Job job_list[MAX_JOBS];
+int job_count = 0;
 
 pid_t current_pid = -1;
 
@@ -48,10 +60,19 @@ void handle_command(char* buffer, char* last_command, int* exit_code) {
         return;
     }
 
+    bool is_background = false;
+    char* ampersand = strrchr(buffer, '&');
+    if (ampersand && *(ampersand + 1) == '\0') {
+        is_background = true;
+        *ampersand = '\0';
+        while (ampersand > buffer && *(ampersand - 1) == ' ') {
+            *(--ampersand) = '\0';
+        }
+    }
+
     char* input_file = NULL;
     char* output_file = NULL;
 
-    // Detect I/O redirection
     char* redirect_in = strchr(buffer, '<');
     char* redirect_out = strchr(buffer, '>');
 
@@ -124,12 +145,18 @@ void handle_command(char* buffer, char* last_command, int* exit_code) {
             exit(1);
         }
         else {
-            current_pid = pid;
-            int status;
-            waitpid(pid, &status, 0);
-            current_pid = -1;
-            if (WIFEXITED(status)) {
-                *exit_code = WEXITSTATUS(status);
+            if (!is_background) {
+                current_pid = pid;
+                int status;
+                waitpid(pid, &status, 0);
+                current_pid = -1;
+                if (WIFEXITED(status)) {
+                    *exit_code = WEXITSTATUS(status);
+                }
+            }
+            else {
+                // We'll handle job storage and printing in the next commit
+                printf("Running as background job (pid=%d)\n", pid);
             }
         }
     }
