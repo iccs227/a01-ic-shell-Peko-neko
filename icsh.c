@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <fcntl.h>
 
 #define MAX_CMD_BUFFER 255
 
@@ -47,6 +48,22 @@ void handle_command(char* buffer, char* last_command, int* exit_code) {
         return;
     }
 
+    char* input_file = NULL;
+    char* output_file = NULL;
+
+    // Detect I/O redirection
+    char* redirect_in = strchr(buffer, '<');
+    char* redirect_out = strchr(buffer, '>');
+
+    if (redirect_in) {
+        *redirect_in = '\0';
+        input_file = strtok(redirect_in + 1, " ");
+    }
+    if (redirect_out) {
+        *redirect_out = '\0';
+        output_file = strtok(redirect_out + 1, " ");
+    }
+
     char* cmd = strtok(buffer, " ");
     if (!cmd) return;
 
@@ -82,6 +99,26 @@ void handle_command(char* buffer, char* last_command, int* exit_code) {
             perror("fork failed");
         }
         else if (pid == 0) {
+            if (input_file) {
+                int fd = open(input_file, O_RDONLY);
+                if (fd < 0) {
+                    perror("input redirection failed");
+                    exit(1);
+                }
+                dup2(fd, STDIN_FILENO);
+                close(fd);
+            }
+
+            if (output_file) {
+                int fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (fd < 0) {
+                    perror("output redirection failed");
+                    exit(1);
+                }
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+            }
+
             execvp(args[0], args);
             perror("exec failed");
             exit(1);
