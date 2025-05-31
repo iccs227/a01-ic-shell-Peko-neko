@@ -155,8 +155,19 @@ void handle_command(char* buffer, char* last_command, int* exit_code) {
                 }
             }
             else {
-                // We'll handle job storage and printing in the next commit
-                printf("Running as background job (pid=%d)\n", pid);
+                // Job storage
+                if (job_count < MAX_JOBS) {
+                    job_list[job_count].job_id = job_count + 1;
+                    job_list[job_count].pid = pid;
+                    job_list[job_count].running = true;
+                    strncpy(job_list[job_count].command, last_command, MAX_CMD_BUFFER - 1);
+                    job_list[job_count].command[MAX_CMD_BUFFER - 1] = '\0';
+                    printf("[%d] %d\n", job_list[job_count].job_id, pid);
+                    job_count++;
+                }
+                else {
+                    fprintf(stderr, "Job table full\n");
+                }
             }
         }
     }
