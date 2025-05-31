@@ -71,6 +71,20 @@ void handle_command(char* buffer, char* last_command, int* exit_code) {
         strcpy(last_command, buffer);
     }
 
+    if (strcmp(cmd, "jobs") == 0) {
+        for (int i = 0; i < job_count; i++) {
+            if (job_list[i].pid > 0) {
+                printf("[%d]%c  %s\t\t%s &\n",
+                    job_list[i].job_id,
+                    (i == job_count - 1) ? '+' : '-',
+                    job_list[i].running ? "Running" : "Stopped",
+                    job_list[i].command);
+            }
+        }
+        *exit_code = 0;
+        return;
+    }
+
     if (strcmp(buffer, "echo $?") == 0) {
         printf("%d\n", *exit_code);
         return;
