@@ -27,6 +27,15 @@ int job_count = 0;
 
 pid_t current_pid = -1;
 
+int find_job_by_id(int id) {
+    for (int i = 0; i < job_count; i++) {
+        if (job_list[i].job_id == id) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 void sigchld_handler(int sig) {
     int status;
     pid_t pid;
@@ -41,7 +50,6 @@ void sigchld_handler(int sig) {
         }
     }
 }
-
 
 void sigint_handler(int sig) {
     if (current_pid > 0) {
@@ -69,25 +77,6 @@ void handle_command(char* buffer, char* last_command, int* exit_code) {
     }
     else {
         strcpy(last_command, buffer);
-    }
-
-    if (strcmp(cmd, "jobs") == 0) {
-        for (int i = 0; i < job_count; i++) {
-            if (job_list[i].pid > 0) {
-                printf("[%d]%c  %s\t\t%s &\n",
-                    job_list[i].job_id,
-                    (i == job_count - 1) ? '+' : '-',
-                    job_list[i].running ? "Running" : "Stopped",
-                    job_list[i].command);
-            }
-        }
-        *exit_code = 0;
-        return;
-    }
-
-    if (strcmp(buffer, "echo $?") == 0) {
-        printf("%d\n", *exit_code);
-        return;
     }
 
     bool is_background = false;
@@ -120,13 +109,81 @@ void handle_command(char* buffer, char* last_command, int* exit_code) {
 
     if (strcmp(cmd, "echo") == 0) {
         char* arg = strtok(NULL, "");
-        if (arg) {
+        if (arg && strcmp(arg, "$?") == 0) {
+            printf("%d\n", *exit_code);
+        }
+        else if (arg) {
             printf("%s\n", arg);
         }
         *exit_code = 0;
         return;
     }
-    else if (strcmp(cmd, "exit") == 0) {
+
+    if (strcmp(cmd, "jobs") == 0) {
+        for (int i = 0; i < job_count; i++) {
+            if (job_list[i].pid > 0) {
+                printf("[%d]%c  %s\t\t%s &\n",
+                    job_list[i].job_id,
+                    (i == job_count - 1) ? '+' : '-',
+                    job_list[i].running ? "Running" : "Stopped",
+                    job_list[i].command);
+            }
+        }
+        *exit_code = 0;
+        return;
+    }
+
+    if (strcmp(cmd, "fg") == 0) {
+        char* arg = strtok(NULL, " ");
+        if (!arg || arg[0] != '%') {
+            printf("Usage: fg %%<job_id>\n");
+            return;
+        }
+
+        int id = atoi(arg + 1);
+        int idx = find_job_by_id(id);
+        if (idx == -1) {
+            printf("No such job\n");
+            return;
+        }
+
+        printf("%s\n", job_list[idx].command);
+        current_pid = job_list[idx].pid;
+        kill(current_pid, SIGCONT);
+        int status;
+        waitpid(current_pid, &status, 0);
+        current_pid = -1;
+        job_list[idx].running = false;
+
+        if (WIFEXITED(status)) {
+            *exit_code = WEXITSTATUS(status);
+        }
+
+        return;
+    }
+
+    if (strcmp(cmd, "bg") == 0) {
+        char* arg = strtok(NULL, " ");
+        if (!arg || arg[0] != '%') {
+            printf("Usage: bg %%<job_id>\n");
+            return;
+        }
+
+        int id = atoi(arg + 1);
+        int idx = find_job_by_id(id);
+        if (idx == -1) {
+            printf("No such job\n");
+            return;
+        }
+
+        job_list[idx].running = true;
+        kill(job_list[idx].pid, SIGCONT);
+        printf("[%d]+ %s &\n", job_list[idx].job_id, job_list[idx].command);
+        *exit_code = 0;
+        return;
+    }
+
+    if (strcmp(cmd, "exit") == 0) {
         char* arg = strtok(NULL, " ");
         if (arg) {
             int code = atoi(arg);
@@ -135,69 +192,67 @@ void handle_command(char* buffer, char* last_command, int* exit_code) {
         printf("bye\n");
         exit(*exit_code);
     }
+
+    char* args[64];
+    int i = 0;
+    args[i++] = cmd;
+    char* token;
+    while ((token = strtok(NULL, " ")) != NULL && i < 63) {
+        args[i++] = token;
+    }
+    args[i] = NULL;
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        perror("fork failed");
+    }
+    else if (pid == 0) {
+        if (input_file) {
+            int fd = open(input_file, O_RDONLY);
+            if (fd < 0) {
+                perror("input redirection failed");
+                exit(1);
+            }
+            dup2(fd, STDIN_FILENO);
+            close(fd);
+        }
+
+        if (output_file) {
+            int fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (fd < 0) {
+                perror("output redirection failed");
+                exit(1);
+            }
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+        }
+
+        execvp(args[0], args);
+        perror("exec failed");
+        exit(1);
+    }
     else {
-        char* args[64];
-        int i = 0;
-        args[i++] = cmd;
-        char* token;
-        while ((token = strtok(NULL, " ")) != NULL && i < 63) {
-            args[i++] = token;
-        }
-        args[i] = NULL;
-
-        pid_t pid = fork();
-        if (pid < 0) {
-            perror("fork failed");
-        }
-        else if (pid == 0) {
-            if (input_file) {
-                int fd = open(input_file, O_RDONLY);
-                if (fd < 0) {
-                    perror("input redirection failed");
-                    exit(1);
-                }
-                dup2(fd, STDIN_FILENO);
-                close(fd);
+        if (!is_background) {
+            current_pid = pid;
+            int status;
+            waitpid(pid, &status, 0);
+            current_pid = -1;
+            if (WIFEXITED(status)) {
+                *exit_code = WEXITSTATUS(status);
             }
-
-            if (output_file) {
-                int fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                if (fd < 0) {
-                    perror("output redirection failed");
-                    exit(1);
-                }
-                dup2(fd, STDOUT_FILENO);
-                close(fd);
-            }
-
-            execvp(args[0], args);
-            perror("exec failed");
-            exit(1);
         }
         else {
-            if (!is_background) {
-                current_pid = pid;
-                int status;
-                waitpid(pid, &status, 0);
-                current_pid = -1;
-                if (WIFEXITED(status)) {
-                    *exit_code = WEXITSTATUS(status);
-                }
+            if (job_count < MAX_JOBS) {
+                job_list[job_count].job_id = job_count + 1;
+                job_list[job_count].pid = pid;
+                job_list[job_count].running = true;
+                strncpy(job_list[job_count].command, last_command, MAX_CMD_BUFFER - 1);
+                job_list[job_count].command[MAX_CMD_BUFFER - 1] = '\0';
+                printf("[%d] %d\n", job_list[job_count].job_id, pid);
+                job_count++;
             }
             else {
-                // Job storage
-                if (job_count < MAX_JOBS) {
-                    job_list[job_count].job_id = job_count + 1;
-                    job_list[job_count].pid = pid;
-                    job_list[job_count].running = true;
-                    strncpy(job_list[job_count].command, last_command, MAX_CMD_BUFFER - 1);
-                    job_list[job_count].command[MAX_CMD_BUFFER - 1] = '\0';
-                    printf("[%d] %d\n", job_list[job_count].job_id, pid);
-                    job_count++;
-                }
-                else {
-                    fprintf(stderr, "Job table full\n");
-                }
+                fprintf(stderr, "Job table full\n");
             }
         }
     }
@@ -213,7 +268,6 @@ int main(int argc, char* argv[]) {
     signal(SIGINT, sigint_handler);
     signal(SIGTSTP, sigtstp_handler);
     signal(SIGCHLD, sigchld_handler);
-
 
     if (argc > 1) {
         input = fopen(argv[1], "r");
