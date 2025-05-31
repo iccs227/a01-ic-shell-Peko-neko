@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 #include <unistd.h>
+#include <sys/types.h>
+
 
 #define MAX_CMD_BUFFER 255
 #define MAX_JOBS 100
