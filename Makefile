@@ -1,13 +1,20 @@
-CC=gcc
-CFLAGS=-Wall -g 
-BINARY=icsh
+# Makefile for icsh project
 
+CC = gcc
+CFLAGS = -Wall -Wextra -std=c99 -g
+OBJS = main.o command.o job.o signal.o
+
+# Default target
 all: icsh
 
-icsh: icsh.c
-	$(CC) -o $(BINARY) $(CFLAGS) $<
+# Link object files to create the final executable
+icsh: $(OBJS)
+	$(CC) $(CFLAGS) -o icsh $(OBJS)
 
-.PHONY: clean
+# Compile each .c file into .o
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
+# Clean up build files
 clean:
-	rm -f $(BINARY)
+	rm -f *.o icsh
