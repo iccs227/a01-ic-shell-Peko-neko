@@ -2,7 +2,7 @@
 
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c99 -g
-OBJS = main.o command.o job.o signal.o
+OBJS = main.o commands.o jobs.o signals.o
 
 # Default target
 all: icsh
